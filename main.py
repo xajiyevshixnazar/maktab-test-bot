@@ -12,6 +12,10 @@ from database.connection import init_db
 from handlers import common_router, admin_router, student_router
 from middlewares import DbSessionMiddleware
 
+import os
+import aiohttp
+from aiohttp import web
+
 # Loglarni sozlash
 logging.basicConfig(
     level=logging.INFO,
@@ -21,6 +25,38 @@ logging.basicConfig(
     ],
 )
 logger = logging.getLogger(__name__)
+
+
+async def start_health_server(port: int):
+    """Render.com Web Service sifatida sog'liq tekshiruvi (Health Check) uchun web server"""
+    async def handle_ping(request):
+        return web.Response(text="OK - Maktab Test Bot is running!", status=200)
+
+    app = web.Application()
+    app.router.add_get("/", handle_ping)
+    app.router.add_get("/health", handle_ping)
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    logger.info(f"Render sog'liq tekshiruvi serveri 0.0.0.0:{port} da ishga tushirildi.")
+
+
+async def keep_alive_task():
+    """Render bepul tarifida bot uxlab qolmasligi uchun har 10 daqiqada o'zini uyg'otib turish"""
+    render_url = os.getenv("RENDER_EXTERNAL_URL")
+    if not render_url:
+        return
+    await asyncio.sleep(60)
+    while True:
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"{render_url}/health", timeout=15) as resp:
+                    logger.info(f"Keep-alive ping muvaffaqiyatli: {resp.status}")
+        except Exception as e:
+            logger.debug(f"Keep-alive ping xatosi: {e}")
+        await asyncio.sleep(600)
 
 
 async def main():
@@ -57,6 +93,16 @@ async def main():
 
     # Eski kutilmagan xabarlarni o'chirib, pollingni boshlash
     await bot.delete_webhook(drop_pending_updates=True)
+
+    # Render.com yoki bulutli hostinglar uchun (agar PORT muhit o'zgaruvchisi berilgan bo'lsa)
+    port = os.getenv("PORT")
+    if port:
+        try:
+            await start_health_server(int(port))
+            asyncio.create_task(keep_alive_task())
+        except Exception as e:
+            logger.warning(f"Sog'liq serverini ishga tushirishda ogohlantirish: {e}")
+
     logger.info("Maktab oylik test boti ishga tushdi! Polling boshlanmoqda...")
 
     try:

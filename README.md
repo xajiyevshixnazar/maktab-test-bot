@@ -1,5 +1,7 @@
 # 📚 Maktab Oylik Test Telegram Boti
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/xajiyevshixnazar/maktab-test-bot)
+
 Ushbu bot maktab o'quvchilaridan oylik test sinovlarini avtomatlashtirilgan tarzda olish, natijalarni hisoblash, vaqtni nazorat qilish va reyting hisobotlarini Excel (.xlsx) formatida shakllantirish uchun yaratilgan to'liq asinxron tizimdir.
 
 ---

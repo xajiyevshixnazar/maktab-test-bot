@@ -6,3 +6,4 @@ aiosqlite>=0.20.0
 python-dotenv>=1.0.1
 pydantic-settings>=2.5.2
 openpyxl>=3.1.5
+aiohttp>=3.9.0
