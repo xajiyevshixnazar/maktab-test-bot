@@ -1,0 +1,14 @@
+[Unit]
+Description=Maktab Test Telegram Boti
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/maktab_bot
+ExecStart=/root/maktab_bot/venv/bin/python main.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
