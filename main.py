@@ -91,6 +91,21 @@ async def main():
     dp.include_router(admin_router)
     dp.include_router(student_router)
 
+    # Global xatoliklar nazorati: kutilmagan xatolik yuz berganda adminga xabar berish
+    from aiogram.types import ErrorEvent
+    @dp.error()
+    async def global_error_handler(event: ErrorEvent):
+        logger.error(f"Kutilmagan xatolik: {event.exception}", exc_info=True)
+        try:
+            from utils.notifier import notify_error_to_admins
+            await notify_error_to_admins(
+                bot=event.bot,
+                error_msg=str(event.exception)[:350],
+                context=f"Update turi: {event.update.event_type if event.update else 'unknown'}"
+            )
+        except Exception as err:
+            logger.error(f"Adminga xatolik yetkazishda muammo: {err}")
+
     # Eski kutilmagan xabarlarni o'chirib, pollingni boshlash
     await bot.delete_webhook(drop_pending_updates=True)
 

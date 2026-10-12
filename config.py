@@ -7,11 +7,21 @@ load_dotenv(BASE_DIR / ".env")
 
 BOT_TOKEN: str = os.getenv("BOT_TOKEN", "").strip()
 
-# Admin IDs ro'yxati
+# Admin IDs ro'yxati (env da bo'lmasa, standart fallback qiymatlar ishlaydi)
+DEFAULT_ADMIN_IDS: list[int] = [1303759816, 5236823441]
 raw_admin_ids: str = os.getenv("ADMIN_IDS", "")
-ADMIN_IDS: list[int] = [
-    int(x.strip()) for x in raw_admin_ids.split(",") if x.strip().isdigit()
+env_admin_ids: list[int] = [
+    int(x.strip()) for x in raw_admin_ids.split(",") if x.strip().lstrip("-").isdigit()
 ]
+# Barcha admin ID larini birlashtirish
+ADMIN_IDS: list[int] = list(set(env_admin_ids + DEFAULT_ADMIN_IDS))
+
+# Guruh chat ID (Natijalar yuboriladigan guruh, standart: -1004465820867)
+raw_group_id: str = os.getenv("GROUP_CHAT_ID", "-1004465820867").strip()
+try:
+    GROUP_CHAT_ID: int = int(raw_group_id)
+except ValueError:
+    GROUP_CHAT_ID: int = -1004465820867
 
 # Ma'lumotlar bazasi URL manzili
 DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///school_test.db").strip()

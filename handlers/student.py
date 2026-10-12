@@ -24,6 +24,7 @@ from keyboards.inline import (
 )
 from states.test_taking import TestTakingState
 from utils.timer import schedule_test_timer, cancel_test_timer
+from utils.notifier import send_result_to_group_and_admins
 
 router = Router(name="student_router")
 
@@ -286,10 +287,30 @@ async def process_answer_callback(
         pct = (score / total * 100) if total > 0 else 0.0
         await finish_test_attempt(session, attempt_id, score, pct)
         await state.clear()
+
+        user = await get_user(session, callback.from_user.id)
+        full_name_str = user.full_name if user else (callback.from_user.full_name or "O'quvchi")
+        grade_str = user.grade if user else "-"
+
+        # Natijani avtomatik ravishda belgilangan guruhga yuborish
+        await send_result_to_group_and_admins(
+            bot=callback.bot,
+            user_id=callback.from_user.id,
+            full_name=full_name_str,
+            grade=grade_str,
+            username=callback.from_user.username,
+            test_title=test_title,
+            score=score,
+            total_questions=total,
+            percentage=pct,
+            spent_time_str=f"{int(duration_seconds // 60)} daqiqa (Vaqt tugadi)",
+        )
+
         await callback.message.edit_text(
             f"⏰ <b>Vaqt tugadi!</b>\n\n"
             f"Ajratilgan vaqt tugaganligi sababli test yakunlandi.\n"
-            f"📊 Natijangiz: <b>{score} / {total}</b> ({pct:.1f}%)",
+            f"📊 Natijangiz: <b>{score} / {total}</b> ({pct:.1f}%)\n\n"
+            f"<i>Natijangiz guruhga va ustozga yuborildi.</i>",
             parse_mode="HTML"
         )
         await callback.answer("Vaqt tugadi!", show_alert=True)
@@ -331,6 +352,7 @@ async def process_answer_callback(
         spent_seconds = int(time.time() - start_ts)
         spent_min = spent_seconds // 60
         spent_sec = spent_seconds % 60
+        spent_time_str = f"{spent_min} daqiqa {spent_sec} soniya"
 
         percentage = (score / total_q * 100) if total_q > 0 else 0.0
         await finish_test_attempt(session, attempt_id, score, percentage)
@@ -338,17 +360,33 @@ async def process_answer_callback(
 
         user = await get_user(session, callback.from_user.id)
         user_info = f"{user.full_name} ({user.grade})" if user else ""
+        full_name_str = user.full_name if user else (callback.from_user.full_name or "O'quvchi")
+        grade_str = user.grade if user else "-"
+
+        # Natijani avtomatik ravishda belgilangan guruhga va adminlarga yuborish
+        await send_result_to_group_and_admins(
+            bot=callback.bot,
+            user_id=callback.from_user.id,
+            full_name=full_name_str,
+            grade=grade_str,
+            username=callback.from_user.username,
+            test_title=test_title,
+            score=score,
+            total_questions=total_q,
+            percentage=percentage,
+            spent_time_str=spent_time_str,
+        )
 
         result_text = (
             "🎉 <b>TEST YAKUNLANDI!</b>\n\n"
             f"📚 Test: <b>{test_title}</b>\n"
             f"👤 O'quvchi: <b>{user_info}</b>\n"
-            f"⏱ Sarflangan vaqt: <b>{spent_min} daqiqa {spent_sec} soniya</b>\n\n"
+            f"⏱ Sarflangan vaqt: <b>{spent_time_str}</b>\n\n"
             f"✅ To'g'ri javoblar: <b>{score} ta</b>\n"
             f"❌ Noto'g'ri javoblar: <b>{total_q - score} ta</b>\n"
             f"📊 Jami savollar: <b>{total_q} ta</b>\n"
             f"🎯 <b>Natija: {percentage:.1f}%</b>\n\n"
-            "<i>Natijangiz saqlandi va ustozga yuborildi.</i>"
+            "<i>Natijangiz saqlandi hamda guruhga va ustozga yuborildi.</i>"
         )
         await callback.message.edit_text(result_text, parse_mode="HTML")
         await callback.answer("Test yakunlandi!")
