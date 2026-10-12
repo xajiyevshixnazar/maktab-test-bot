@@ -31,12 +31,20 @@ router = Router(name="student_router")
 # ==================== TESTLAR RO'YXATINI KO'RISH ====================
 
 @router.message(F.text == "📝 Testlar")
-async def show_active_tests(message: Message, session: AsyncSession):
+async def show_active_tests(message: Message, session: AsyncSession, state: FSMContext):
     """Faol testlar ro'yxatini ko'rsatish"""
     user_id = message.from_user.id
     user = await get_user(session, user_id)
     if not user:
-        await message.answer("Iltimos, avval /start buyrug'i orqali ro'yxatdan o'ting.")
+        from states.registration import RegistrationState
+        await state.set_state(RegistrationState.waiting_for_full_name)
+        await message.answer(
+            "Assalomu alaykum! Maktab oylik test tizimiga xush kelibsiz.\n\n"
+            "Testlarni ko'rish va topshirish uchun avval 1 marta ro'yxatdan o'tishingiz kerak.\n\n"
+            "Iltimos, <b>Ism va Familiyangizni</b> kiriting:\n"
+            "<i>(Masalan: Saidov Jasur)</i>",
+            parse_mode="HTML"
+        )
         return
 
     tests = await get_active_tests(session)
@@ -367,9 +375,21 @@ async def stale_answer_fallback(callback: CallbackQuery, state: FSMContext):
 # ==================== O'QUVCHI NATIJALARI ====================
 
 @router.message(F.text == "📊 Natijalarim")
-async def show_my_results(message: Message, session: AsyncSession):
+async def show_my_results(message: Message, session: AsyncSession, state: FSMContext):
     """O'quvchining o'z natijalari tarixi"""
     user_id = message.from_user.id
+    user = await get_user(session, user_id)
+    if not user:
+        from states.registration import RegistrationState
+        await state.set_state(RegistrationState.waiting_for_full_name)
+        await message.answer(
+            "Natijalaringizni ko'rish uchun avval ro'yxatdan o'tishingiz kerak.\n\n"
+            "Iltimos, <b>Ism va Familiyangizni</b> kiriting:\n"
+            "<i>(Masalan: Saidov Jasur)</i>",
+            parse_mode="HTML"
+        )
+        return
+
     attempts = await get_user_attempts(session, user_id)
 
     if not attempts:

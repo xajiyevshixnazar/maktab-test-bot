@@ -1,3 +1,8 @@
+databases:
+  - name: maktab-db
+    plan: free
+    region: frankfurt
+
 services:
   - type: web
     name: maktab-test-bot
@@ -12,6 +17,8 @@ services:
       - key: ADMIN_IDS
         sync: false
       - key: DATABASE_URL
-        value: sqlite+aiosqlite:///school_test.db
+        fromDatabase:
+          name: maktab-db
+          property: connectionString
       - key: PORT
         value: 10000

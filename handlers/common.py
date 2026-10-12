@@ -159,12 +159,18 @@ async def cmd_cancel(message: Message, state: FSMContext):
 # ==================== PROFIL VA TAHRIRLASH ====================
 
 @router.message(F.text.in_(["👤 Profilim", "👤 Ustoz profili"]))
-async def show_profile(message: Message, session: AsyncSession):
+async def show_profile(message: Message, session: AsyncSession, state: FSMContext):
     """Foydalanuvchi profili"""
     user_id = message.from_user.id
     user = await get_user(session, user_id)
     if not user:
-        await message.answer("Siz ro'yxatdan o'tmagansiz. /start buyrug'ini bosing.")
+        await state.set_state(RegistrationState.waiting_for_full_name)
+        await message.answer(
+            "Profilingizni ko'rish uchun avval ro'yxatdan o'tishingiz kerak.\n\n"
+            "Iltimos, <b>Ism va Familiyangizni</b> kiriting:\n"
+            "<i>(Masalan: Saidov Jasur)</i>",
+            parse_mode="HTML"
+        )
         return
 
     is_admin = is_admin_check(user_id)
