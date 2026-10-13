@@ -182,19 +182,26 @@ async def process_questions_text(
         await message.answer("Test yaratish bekor qilindi.", reply_markup=get_admin_main_keyboard())
         return
 
-    questions, errors = parse_questions_from_text(message.text)
+    data = await state.get_data()
+    prev_text = data.get("accumulated_text", "")
+    full_text = (prev_text + "\n" + message.text).strip() if prev_text else message.text
 
-    if errors:
-        error_msg = "⚠️ <b>Savollarni qabul qilishda quyidagi xatoliklar aniqlandi:</b>\n\n"
-        error_msg += "\n".join(f"• {e}" for e in errors[:10])
-        if len(errors) > 10:
-            error_msg += f"\n... va yana {len(errors) - 10} ta xato."
-        error_msg += "\n\nIltimos, formatni tekshirib qaytadan yuboring."
+    questions, errors = parse_questions_from_text(full_text)
+
+    if errors and not questions:
+        await state.update_data(accumulated_text=full_text)
+        error_msg = "⚠️ <b>Savollarni tahlil qilishda quyidagi xatoliklar aniqlandi:</b>\n\n"
+        error_msg += "\n".join(f"• {e}" for e in errors[:5])
+        error_msg += (
+            "\n\n💡 <i>Eslatma: Agar test savollari ko'p bo'lib, Telegram matnni bir nechta xabarga bo'lib yuborayotgan bo'lsa, "
+            "matnning davomini yoki oxiridagi «Javoblar kaliti»ni hozir yuboring.\n"
+            "Yoki savollarni .txt yoki Word (.docx) fayl sifatida yuborishingiz ham mumkin!</i>"
+        )
         await message.answer(error_msg, parse_mode="HTML")
         return
 
     if not questions:
-        await message.answer("⚠️ Hech qanday savol aniqlanmadi. Formatni tekshirib qaytadan yuboring.")
+        await message.answer("⚠️ Hech qanday savol aniqlanmadi. Iltimos, formatni tekshiring yoki fayl (.txt, .docx) ko'rinishida yuboring.")
         return
 
     data = await state.get_data()
@@ -242,8 +249,8 @@ async def process_questions_excel(
     doc = message.document
     filename = (doc.file_name or "").lower()
 
-    if not (filename.endswith(".xlsx") or filename.endswith(".xls") or filename.endswith(".txt") or filename.endswith(".csv")):
-        await message.answer("⚠️ Iltimos, Bloknot (.txt) yoki Excel (.xlsx) faylini yuboring!")
+    if not (filename.endswith(".xlsx") or filename.endswith(".xls") or filename.endswith(".txt") or filename.endswith(".csv") or filename.endswith(".docx")):
+        await message.answer("⚠️ Iltimos, Bloknot (.txt), Word (.docx) yoki Excel (.xlsx) faylini yuboring!")
         return
 
     file = await bot.get_file(doc.file_id)
@@ -253,6 +260,11 @@ async def process_questions_excel(
 
     if filename.endswith(".xlsx") or filename.endswith(".xls"):
         questions, errors = parse_questions_from_excel(file_bytes)
+    elif filename.endswith(".docx"):
+        import docx
+        doc_obj = docx.Document(io.BytesIO(file_bytes))
+        text_content = "\n".join(p.text for p in doc_obj.paragraphs if p.text.strip())
+        questions, errors = parse_questions_from_text(text_content)
     else:
         text_content = file_bytes.decode("utf-8-sig", errors="replace")
         questions, errors = parse_questions_from_text(text_content)
