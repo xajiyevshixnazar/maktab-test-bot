@@ -149,23 +149,23 @@ async def process_test_duration(message: Message, state: FSMContext):
 
     help_text = (
         "📥 <b>Endi test savollarini yuboring!</b>\n\n"
-        "Savollarni 2 xil usulda yuklashingiz mumkin:\n\n"
-        "<b>1-usul: Matn ko'rinishida yuborish:</b>\n"
-        "<i>1. O'zbekiston poytaxti qaysi?\n"
+        "Savollarni quyidagi qulay usullarda yuklashingiz mumkin:\n\n"
+        "<b>1-usul: Fayl orqali yuborish (eng osoni):</b>\n"
+        "• 📄 <b>PDF fayl</b> (.pdf)\n"
+        "• 📝 <b>Word fayl</b> (.docx)\n"
+        "• 📊 <b>Excel fayl</b> (.xlsx)\n"
+        "• 📑 <b>Bloknot</b> (.txt)\n"
+        "<i>Faylni shunchaki botga yuboring, bot barcha savollar va javoblar kalitini avtomatik ajratib oladi!</i>\n\n"
+        "<b>2-usul: To'g'ridan-to'g'ri xabar sifatida yuborish:</b>\n"
+        "Savollarni botga matn ko'rinishida nusxalab (copy-paste) yuborishingiz mumkin.\n\n"
+        "<i>Namuna:</i>\n"
+        "1. O'zbekiston poytaxti qaysi?\n"
         "A) Samarqand\n"
         "B) Toshkent\n"
         "C) Buxoro\n"
-        "D) Xiva\n"
-        "Javob: B\n"
-        "===\n"
-        "2. 5 * 5 nechiga teng?\n"
-        "A) 20\n"
-        "B) 25\n"
-        "C) 30\n"
-        "D) 15\n"
-        "Javob: B</i>\n\n"
-        "<b>2-usul: Excel (.xlsx) fayl ko'rinishida yuborish:</b>\n"
-        "To'ldirilgan faylni hujjat (document) sifatida botga yuboring."
+        "D) Xiva\n\n"
+        "Javoblar kaliti:\n"
+        "1-B"
     )
     await message.answer(help_text, reply_markup=get_cancel_keyboard(), parse_mode="HTML")
 
@@ -245,29 +245,75 @@ async def process_questions_excel(
     session: AsyncSession,
     bot: Bot
 ):
-    """Savollarni fayl ko'rinishida (.xlsx, .txt, .csv) qabul qilish"""
+    """Savollarni istalgan fayl ko'rinishida (.pdf, .docx, .xlsx, .txt va barcha formatlar) qabul qilish"""
     doc = message.document
     filename = (doc.file_name or "").lower()
 
-    if not (filename.endswith(".xlsx") or filename.endswith(".xls") or filename.endswith(".txt") or filename.endswith(".csv") or filename.endswith(".docx")):
-        await message.answer("⚠️ Iltimos, Bloknot (.txt), Word (.docx) yoki Excel (.xlsx) faylini yuboring!")
+    status_msg = await message.answer("⏳ <i>Fayl qabul qilindi, tahlil qilinmoqda...</i>", parse_mode="HTML")
+
+    try:
+        file = await bot.get_file(doc.file_id)
+        file_bytes_io = io.BytesIO()
+        await bot.download_file(file.file_path, file_bytes_io)
+        file_bytes = file_bytes_io.getvalue()
+
+        if filename.endswith(".xlsx") or filename.endswith(".xls"):
+            questions, errors = parse_questions_from_excel(file_bytes)
+        elif filename.endswith(".docx"):
+            import docx
+            doc_obj = docx.Document(io.BytesIO(file_bytes))
+            paragraphs = [p.text for p in doc_obj.paragraphs if p.text.strip()]
+            table_lines = []
+            for table in doc_obj.tables:
+                for row in table.rows:
+                    row_text = " ".join(cell.text.strip() for cell in row.cells if cell.text.strip())
+                    if row_text:
+                        table_lines.append(row_text)
+            if len(paragraphs) < 5 and len(table_lines) > len(paragraphs):
+                text_content = "\n".join(table_lines)
+            else:
+                text_content = "\n".join(paragraphs)
+            questions, errors = parse_questions_from_text(text_content)
+        elif filename.endswith(".pdf"):
+            import pypdf
+            reader = pypdf.PdfReader(io.BytesIO(file_bytes))
+            pages_text = []
+            for page in reader.pages:
+                extracted = page.extract_text()
+                if extracted:
+                    pages_text.append(extracted)
+            text_content = "\n".join(pages_text)
+            if not text_content.strip():
+                await status_msg.delete()
+                await message.answer(
+                    "⚠️ <b>PDF fayldan matn ajratib olinmadi.</b>\n\n"
+                    "Agar ushbu PDF skaner qilingan rasm bo'lsa, iltimos, matnli PDF, Word (.docx) yoki Bloknot (.txt) holida yuboring.",
+                    parse_mode="HTML"
+                )
+                return
+            questions, errors = parse_questions_from_text(text_content)
+        else:
+            # Barcha boshqa fayllarni (txt, csv, rtf, log va boshqalar) matn sifatida dekodlash
+            text_content = None
+            for enc in ["utf-8-sig", "utf-8", "windows-1251", "cp1252", "latin-1"]:
+                try:
+                    text_content = file_bytes.decode(enc)
+                    break
+                except UnicodeDecodeError:
+                    continue
+            if text_content is None:
+                text_content = file_bytes.decode("utf-8-sig", errors="replace")
+            questions, errors = parse_questions_from_text(text_content)
+
+        await status_msg.delete()
+
+    except Exception as e:
+        try:
+            await status_msg.delete()
+        except Exception:
+            pass
+        await message.answer(f"⚠️ Faylni o'qishda xatolik yuz berdi: {str(e)}")
         return
-
-    file = await bot.get_file(doc.file_id)
-    file_bytes_io = io.BytesIO()
-    await bot.download_file(file.file_path, file_bytes_io)
-    file_bytes = file_bytes_io.getvalue()
-
-    if filename.endswith(".xlsx") or filename.endswith(".xls"):
-        questions, errors = parse_questions_from_excel(file_bytes)
-    elif filename.endswith(".docx"):
-        import docx
-        doc_obj = docx.Document(io.BytesIO(file_bytes))
-        text_content = "\n".join(p.text for p in doc_obj.paragraphs if p.text.strip())
-        questions, errors = parse_questions_from_text(text_content)
-    else:
-        text_content = file_bytes.decode("utf-8-sig", errors="replace")
-        questions, errors = parse_questions_from_text(text_content)
 
     if errors:
         error_msg = "⚠️ <b>Faylda quyidagi xatoliklar aniqlandi:</b>\n\n"
