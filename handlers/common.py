@@ -38,6 +38,10 @@ async def cmd_start(message: Message, state: FSMContext, session: AsyncSession):
                 grade="Ustoz",
                 role="admin"
             )
+        elif user.role != "admin":
+            user.role = "admin"
+            await session.commit()
+
         welcome_text = (
             f"Assalomu alaykum, Ustoz <b>{user.full_name}</b>!\n\n"
             "👨‍🏫 <b>Ustoz boshqaruv paneliga xush kelibsiz.</b>\n"
@@ -71,6 +75,41 @@ async def cmd_start(message: Message, state: FSMContext, session: AsyncSession):
     await message.answer(
         welcome_text,
         reply_markup=get_student_main_keyboard(),
+        parse_mode="HTML"
+    )
+
+
+@router.message(Command("admin", "panel"))
+async def cmd_admin(message: Message, state: FSMContext, session: AsyncSession):
+    """Admin boshqaruv panelini ochish (/admin)"""
+    await state.clear()
+    user_id = message.from_user.id
+
+    if not is_admin_check(user_id):
+        await message.answer("⚠️ Bu bo'lim faqat bot adminlari (ustozlar) uchun!")
+        return
+
+    user = await get_user(session, user_id)
+    if not user:
+        user = await register_user(
+            session=session,
+            user_id=user_id,
+            full_name=message.from_user.full_name or "Ustoz",
+            grade="Ustoz",
+            role="admin"
+        )
+    elif user.role != "admin":
+        user.role = "admin"
+        await session.commit()
+
+    welcome_text = (
+        f"Assalomu alaykum, Ustoz <b>{user.full_name}</b>!\n\n"
+        "👨‍🏫 <b>Ustoz boshqaruv paneliga xush kelibsiz.</b>\n"
+        "Siz bu yerda yangi oylik testlar yaratishingiz, ularni boshqarishingiz va o'quvchilar natijalarini olishingiz mumkin:"
+    )
+    await message.answer(
+        welcome_text,
+        reply_markup=get_admin_main_keyboard(),
         parse_mode="HTML"
     )
 
@@ -174,6 +213,10 @@ async def show_profile(message: Message, session: AsyncSession, state: FSMContex
         return
 
     is_admin = is_admin_check(user_id)
+    if is_admin and user.role != "admin":
+        user.role = "admin"
+        await session.commit()
+
     joined_date = user.created_at.strftime("%Y-%m-%d %H:%M") if user.created_at else "Noma'lum"
     status_label = "Ustoz (Admin)" if is_admin else "O'quvchi"
 
@@ -195,7 +238,7 @@ async def show_profile(message: Message, session: AsyncSession, state: FSMContex
         )
         await message.answer(text, reply_markup=edit_kb, parse_mode="HTML")
     else:
-        await message.answer(text, parse_mode="HTML")
+        await message.answer(text, reply_markup=get_admin_main_keyboard(), parse_mode="HTML")
 
 
 @router.callback_query(F.data == "edit_my_profile")
